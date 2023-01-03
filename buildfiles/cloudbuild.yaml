@@ -1,0 +1,84 @@
+---
+images:
+  - eu.gcr.io/docker-build-new/pubsubrequesthandler
+timeout: 900s
+
+steps:
+  - args:
+      - buildfiles/script.sh
+    entrypoint: bash
+    env:
+      - BUILD_ID=$BUILD_ID
+      - PROJECT_ID=$PROJECT_ID
+      - BRANCH_NAME=$BRANCH_NAME
+      - COMMIT_SHA=$COMMIT_SHA
+      - SHORT_SHA=$SHORT_SHA
+      - REPO_NAME=$REPO_NAME
+      - REVISION_ID=$REVISION_ID
+      - TAG_NAME=$TAG_NAME
+      - _PR_NUMBER=$_PR_NUMBER
+      - _HEAD_REPO_URL=$_HEAD_REPO_URL
+      - _HEAD_BRANCH=$_HEAD_BRANCH
+      - _BASE_BRANCH=$_BASE_BRANCH
+    id: utilscript
+    name: gcr.io/cloud-builders/git
+
+  - args:
+      - "-m"
+      - pip
+      - install
+      - "-t"
+      - /workspace/lib
+      - "-r"
+      - /workspace/requirements.txt
+    entrypoint: python3
+    id: INSTALL
+    name : "python:3.8"
+
+  - args:
+      - build
+      - "-t"
+      - eu.gcr.io/docker-build-new/pubsubrequesthandler
+      - "."
+    id : BUILD_IMAGE
+    name : gcr.io/cloud-builders/docker
+    waitFor:
+      - INSTALL
+
+  - args:
+      - push
+      - eu.gcr.io/docker-build-new/pubsubrequesthandler
+
+    id : PUSH_IMAGE
+    name : gcr.io/cloud-builders/docker
+    waitFor:
+      - BUILD_IMAGE
+
+  - args:
+      - run
+      - deploy
+      - pubsubrequesthandler
+      - "--image"
+      - eu.gcr.io/docker-build-new/pubsubrequesthandler
+      - "--project"
+      - docker-build-new
+      - "--region"
+      - europe-west1
+      - "--cpu"
+      - "1"
+      - "--memory"
+      - 1024Mi
+      - "--max-instances"
+      - "6"
+      - "--platform"
+      - managed
+      - "--concurrency"
+      - "70"
+      - "--port"
+      - "8080"
+      - "--no-allow-unauthenticated"
+    entrypoint: gcloud
+    id : DEPLOY_SERVICE
+    name : gcr.io/google.com/cloudsdktool/cloud-sdk
+    waitFor:
+      - PUSH_IMAGE
